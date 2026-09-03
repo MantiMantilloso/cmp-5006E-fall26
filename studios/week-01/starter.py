@@ -14,6 +14,8 @@ it watches the cipher's confidentiality guarantee COLLAPSE the instant the
 plaintext is English — because English leaks its letter statistics through any
 substitution. Naming that assumption is naming the attack (Kerckhoffs, week 1).
 """
+import random
+
 from cipher import (ALPHABET, ENGLISH_FREQ, apply_guess, letter_counts, score)
 
 
@@ -36,8 +38,9 @@ def frequency_guess_key(ciphertext):
         letters, commonest first.
       - ``zip`` the two rankings.
     """
-    # TODO: build and return the frequency-rank decryption map.
-    raise NotImplementedError
+    cipher_order = [ch for ch, _ in letter_counts(ciphertext).most_common()]
+    english_order = sorted(ENGLISH_FREQ, key=ENGLISH_FREQ.get, reverse=True)
+    return {cipher_ch: plain_ch for cipher_ch, plain_ch in zip(cipher_order, english_order)}
 
 
 def crack(ciphertext, restarts=8, iters=3000, seed=0):
@@ -65,8 +68,42 @@ def crack(ciphertext, restarts=8, iters=3000, seed=0):
     NOTE: nothing in this function may reference the true key or the plaintext.
     The only inputs are the ciphertext and the public ``score`` / ``ENGLISH_FREQ``.
     """
-    # TODO: implement the random-restart hill climb described above.
-    raise NotImplementedError
+    rng = random.Random(seed)
+    best_key = None
+    best_score = float("-inf")
+
+    for restart in range(restarts):
+        key = frequency_guess_key(ciphertext).copy()
+        used_plain = set(key.values())
+        remaining_plain = [ch for ch in ALPHABET if ch not in used_plain]
+
+        # Fill unmapped ciphertext symbols with a random permutation of the unused
+        # English letters. This keeps the mapping as a full 1-to-1 assignment.
+        missing_cipher = [ch for ch in ALPHABET if ch not in key]
+        rng.shuffle(remaining_plain)
+        for ch in missing_cipher:
+            key[ch] = remaining_plain.pop()
+
+        current = score(apply_guess(ciphertext, key))
+        if current > best_score:
+            best_score = current
+            best_key = key.copy()
+
+        for _ in range(iters):
+            a, b = rng.sample(ALPHABET, 2)
+            old_a, old_b = key[a], key[b]
+            key[a], key[b] = key[b], key[a]
+
+            cand = score(apply_guess(ciphertext, key))
+            if cand > current:
+                current = cand
+                if cand > best_score:
+                    best_score = cand
+                    best_key = key.copy()
+            else:
+                key[a], key[b] = old_a, old_b
+
+    return best_key if best_key is not None else frequency_guess_key(ciphertext)
 
 
 # ---- Task: defeat your own attack (analysis, no test) -----------------------
