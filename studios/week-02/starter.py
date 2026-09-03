@@ -79,8 +79,8 @@ def recover_other_plaintext(c1, c2, p1_known):
     plaintext (keystream = c1 XOR p1_known), then apply it to c2.
     Return the recovered p2 (bytes), truncated to len(p1_known).
     """
-    # TODO: keystream = xor(c1, p1_known)  ;  return xor(c2, keystream)
-    raise NotImplementedError
+    keystream = xor(c1, p1_known)
+    return xor(c2, keystream)
 
 
 if __name__ == "__main__":
