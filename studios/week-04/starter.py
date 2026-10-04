@@ -36,8 +36,28 @@ def batch_gcd_recover(corpus):
     """
     # TODO: pairwise-GCD scan over corpus["keys"]; for any pair with gcd != 1,
     # recover d for BOTH keys via factor_from_shared(n, gcd, e).
-    raise NotImplementedError
-
+    """
+    keys = corpus["keys"]
+    recovered = {}
+    for i in range(len(keys)):
+        for j in range(i + 1, len(keys)):
+            g = math.gcd(keys[i]["n"], keys[j]["n"])
+            if g != 1:
+                recovered[i] = factor_from_shared(keys[i]["n"], g, keys[i]["e"])
+                recovered[j] = factor_from_shared(keys[j]["n"], g, keys[j]["e"])
+    return recovered
+    """
+    keys = corpus["keys"]
+    recovered = {}
+    for i in range(len(keys)):
+        for j in range(i + 1, len(keys)):
+            shared = math.gcd(keys[i]["n"], keys[j]["n"])
+            if shared == 1:
+                continue
+            for idx in (i, j):
+                n, e = keys[idx]["n"], keys[idx]["e"]
+                recovered[idx] = factor_from_shared(n, shared, e)
+    return recovered
 
 # ---- Task 3: timing side-channel attack -------------------------------------
 
@@ -58,8 +78,14 @@ def timing_attack(secret_len, oracle, rounds=41):
     #   guesses = [known_prefix + bytes([b]) + padding for b in range(256)]
     #   med = time_guesses(oracle, guesses, rounds)
     #   append the byte with the largest median time to the recovered prefix.
-    raise NotImplementedError
-
+    known = b""
+    for pos in range(secret_len):
+        padding = bytes(secret_len - pos - 1)
+        guesses = [known + bytes([b]) + padding for b in range(256)]
+        med = time_guesses(oracle, guesses, rounds)
+        best = max(range(256), key=lambda b: med[b])
+        known += bytes([best])
+    return known
 
 # ---- Task 3 (fix): constant-time comparison ---------------------------------
 
@@ -68,7 +94,12 @@ def constant_time_equal(a, b):
     not depend on the secret. (In real code, call ``hmac.compare_digest``.)"""
     # TODO: length check, then accumulate x ^ y across all bytes; return whether
     # the accumulator is 0 — never early-exit.
-    raise NotImplementedError
+    if len(a) != len(b):
+        return False
+    accumulator = 0
+    for x, y in zip(a, b):
+        accumulator |= x ^ y
+    return accumulator == 0
 
 
 if __name__ == "__main__":
