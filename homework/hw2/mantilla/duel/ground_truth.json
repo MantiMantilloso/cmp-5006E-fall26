@@ -1,0 +1,10 @@
+{
+  "_comment": "EMPTY TEMPLATE: not reviewed and not ready for scoring. Build by hand from the exact target source before examining scored scanner or LLM findings.",
+  "status": "pending-source-review",
+  "target": "pending Medium-level target selection/configuration",
+  "source_revision": null,
+  "review_method": null,
+  "findings": [],
+  "true_negatives": [],
+  "not_present": []
+}
