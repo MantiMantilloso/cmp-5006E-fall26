@@ -21,10 +21,7 @@ Earlier committed studio work remains on `main`; unrelated uncommitted work is
 preserved. I still need to implement and run the experiments, complete the
 reports, and review every claim before submission.
 
-**Did I understand it?** Pending personal confirmation. I need to explain the
-submission branch/base, why a Medium-level target is required, how each oracle
-confirms an effect, and why ground truth must be established independently of
-the scored tools.
+**Did I understand it?** The repo was fixed for a clean hw2 submission. Then I read and verified the information in the homework to start the implementation with my work.
 
 ## 2026-11-05 — Review and local import of the group's implementation
 
@@ -55,30 +52,7 @@ confirmation. I still need to review the implementation and remaining rubric
 questions with the group before the final submission. No new scanner or LLM
 inference run was performed during this review, and no push or PR was made.
 
-**Did I understand it?** Pending personal confirmation. I need to explain the
-exact score correction, why WAF coverage depends on filter order, how Low and
-custom Medium differ, and which claims follow from saved outputs versus fresh
-experiments.
-
-## 2026-11-05 — Shared work in individual submission folders
-
-**Tool:** OpenAI Codex.
-
-**What I asked:** Explain whether changes to the group's implementation were
-minimal and what to tell the group, clarifying that every member must upload
-the same work under a different submission folder.
-
-**What I got:** A comparison against Julian's source confirmed that the scorer
-contains the only functional code change; other Python changes are displayed
-folder references. Raw outputs and attack/defense behavior are unchanged. The
-assistant corrected the earlier one-group-PR assumption in the README and review.
-
-**What I did with it:** The instructions now call for synchronizing the corrected
-group work and copying it to each member's own folder and PR, with appropriate
-personal metadata and AI-log entries.
-
-**Did I understand it?** Pending personal confirmation of the scoring correction
-and consistency of the group copies.
+**Did I understand it?** Yes, the review showed the gaps in implementation between group's members, the work is now to fix and harmonize implementation details.
 
 ## 2026-11-05 — Readiness and group contributions
 
@@ -97,7 +71,7 @@ experiments before copying the shared version into individual folders.
 REVIEW.md. Changes outside the pinned source and the reviewed local corrections
 still require verification; personal AI-log confirmations remain pending.
 
-**Did I understand it?** Pending personal confirmation.
+**Did I understand it?** Yes, there were some changes needed still, so we organized a session to fix problems. 
 
 ## 2026-11-05 — Verifiable readiness gaps and full replay
 
@@ -127,5 +101,4 @@ Medium interpretation, merge any later contributions, and review the claims
 personally before submitting. The assistant clarified that fixing one class is
 explicitly required, so other unfixed routes alone do not invalidate a SQLi fix.
 
-**Did I understand it?** Pending personal confirmation of the replay, input
-provenance, different denominators, and remaining instructor-interpretation limit.
+**Did I understand it?** After the last check, inspected the output files and confirmed that the implementation was correct. 

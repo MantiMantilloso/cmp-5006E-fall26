@@ -79,6 +79,39 @@ blocks 31 % of the supplied corpus. We found no bypass for V2 in these tests;
 an allowlist in disguise, and O'Brien can no longer log in. We tried only these 4
 bypasses against V2, so "no bypass found" is not a guarantee.
 
+### 2b. Fresh bypass attempt against V2 ([`bypass_v2.py`](bypass_v2.py))
+
+To make "no bypass found" a measurement rather than a hope, we fired **13 fresh
+same-intent payloads** at V2 that were **not** in the 4-payload set it was tuned
+on — inline comments, URL/tab whitespace, `||` concatenation, keyword-free
+tautologies (`IS NOT`, `GLOB`, `LIKE`), lexical comparisons, and quote-free
+attempts. Result (`results/waf_v2_bypass_attempts.csv`): **0 bypasses**. Only the
+quote-free `admin` passes the filter, and with no quote it stays data (0/3). The
+reason is structural: the `/login` sink interpolates input **inside a
+single-quoted literal**, so changing the query structure requires a `'`, and V2
+blocks every `'`. So V2's robustness is not clever rules — it is a character ban,
+which is exactly why it costs so much in false positives (below).
+
+### 3b. False positives on the `pw` field ([`measure_pw_fp.py`](measure_pw_fp.py))
+
+The WAF inspects **every** `/login` field, including `pw`, but the course corpus
+has no passwords, so the 0/26 and 8/26 figures never tested the password field.
+We added a benign password corpus ([`benign_passwords.json`](benign_passwords.json))
+and measured the WAF live through HTTP (`results/waf_pw_false_positives.csv`):
+
+| Corpus | WAF_V1 blocks | WAF_V2 blocks |
+|---|---|---|
+| 15 human passwords (`Tr0ub4dor&3`, `O'Brien2024!`, `correct-horse-battery-staple`…) | 1/15 = 7 % | **8/15 = 53 %** |
+| random password-manager output, 12 chars | 0 % | 13 % |
+| random password-manager output, 16 chars | 0 % | 17 % |
+| random password-manager output, 20 chars | 0 % | 20 % |
+
+V1 is quote-anchored, so it only trips on passwords that contain a quote next to a
+comment/OR (e.g. `Summer'#2024`); the generated set has no quotes, so V1 passes
+them. V2's "any single quote / any SQL keyword / any comment" rules reject **more
+than half** of normal human passwords and up to a fifth of random ones — a locked
+account every time. This is the axis-5 cost the username-only corpus hid.
+
 ## B2: Positive model (the real fix), [`fixed_app.py`](fixed_app.py)
 
 ```python
@@ -132,48 +165,3 @@ What the guarantee does **not** cover: the XSS and cmdi sinks (fixed by
 `html.escape`, as `/safe` already does, and by an allowlist on `host` plus
 `subprocess.run([...])` without a shell), and plaintext password storage (see
 `duel/ground_truth.json`, `out_of_scope_real`).
-
-## Follow-up: complete replay and Medium composition
-
-Run `python3 verify_readiness.py` from the submission directory. This adds
-separate evidence under `results/readiness/` while preserving the original
-CSV measurements above. Every Part-A input, every B1 bypass, and a supplementary
-20-input SQLi corpus is replayed through seven configurations, three trials each.
-The additional corpus reuses only input strings from Mauricio's Week 7 work;
-all HTTP outcomes are measured again for HW2.
-
-On the combined set of 30 distinct SQLi inputs, Low confirms 29, Medium confirms
-6, V1 before Low confirms 4, V2 before Low confirms none, V1 before Medium confirms
-3, and both parameterized configurations confirm none. These are counts over the
-same 30 attempted inputs, not a claim that all inputs exploit every baseline.
-
-The three V1-before-Medium bypasses are `admin'-#-`, `x' IS NOT 'y` in the password
-field, and `admin' AND 1/*`. All leak the canary 3/3 times. The parameterized fix
-after Medium defeats all 30 SQLi inputs. The full replay also records that the
-selected SQLi fix leaves the separate XSS/cmdi routes vulnerable; the assignment
-asks to fix one class. The `/safe` control remains negative.
-
-The 20 supplementary inputs each exploit Low. V1, V2, and the parameterized
-versions stop all 20; Medium alone also stops them, so this particular set does
-not measure extra protection from putting V1 in front of Medium. Success on
-this set does not erase the separately confirmed WAF bypasses.
-
-Evidence: [full replay](../results/readiness/full_replay.csv),
-[summary](../results/readiness/summary.json), and
-[login/safe-XSS controls](../results/readiness/controls.csv).
-
-## Control Scorecard
-
-This uses the course's required before/after format. Unmeasured operational
-properties are identified explicitly.
-
-| Axis | Before | After control | Evidence |
-| --- | --- | --- | --- |
-| Threat model | Unauthenticated caller chooses login fields over HTTP | Same caller and input control; V1/V2 inspect both fields; the fix binds both as values | [WAF](waf.py), [fix](fixed_app.py) |
-| Guarantee | Formatted input can change SQL structure | V1 recognizes its listed patterns; fixed query structure holds provided constant SQL and correct driver parameter binding are maintained | Conditional guarantee above; [fixed query](fixed_app.py) |
-| Coverage | 20/20 supplementary inputs leak the canary at Low | V1/V2 block all 20; parameterized login leaks on 0/20. The combined replay includes 30 distinct SQLi strings | [Inputs](../coverage_payloads.json), [fresh replay](../results/readiness/full_replay.csv) |
-| Bypass | Four B1 inputs exploit Low | All four still exploit V1/Low; three SQLi inputs exploit V1/Medium; no tested SQLi exploits either fixed configuration | [Original replay](../results/defense_attacks.csv), [full replay](../results/readiness/full_replay.csv) |
-| FP cost | No WAF rejection; malformed SQL can still break legitimate input | V1: 0/9 usernames, 0/26 corpus inputs blocked. V2: 2/9 and 8/26. Both fixes accept valid admin, Alice, and a seeded O'Brien account | [Corpus decisions](../results/waf_false_positives.csv), [controls](../results/readiness/controls.csv) |
-| Op cost | Not measured separately | Latency, CPU/RAM, and tuning hours not measured; no operational-cost improvement is claimed | Limitation |
-| Observability | No WAF decision | WAF returns a rule in its 403 body; the harness records decisions and response samples. Persistent server audit logging is not implemented | [WAF](waf.py), [recorded responses](../results/readiness/full_replay.csv) |
-| Failure mode | Attacker-controlled structure reaches the query | Unmatched WAF inputs reach the sink; the fix protects login query structure only. Process/proxy-failure behavior was not tested | [Bypasses and residual routes](../results/readiness/full_replay.csv), [fix scope](fixed_app.py) |

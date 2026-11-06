@@ -4,7 +4,39 @@
 python3 duel/score.py           # scores the committed raw outputs in duel/raw/
 python3 duel/run_scanners.py    # optional: re-run semgrep + bandit + sqlmap (needs them on PATH)
 python3 duel/llm_review.py      # optional: re-run the LLM (Ollama + qwen3.8:27b, ~3-4 min per run)
+python3 duel/llm_ablation.py    # optional: LLM with vs. without the # VULN hints (see below)
+python3 duel/ablation_score.py  # scores the ablation -> results/llm_ablation_scores.csv
 ```
+
+> **On the CSRF and "session tokens" hallucinations (this copy's nuance).** We
+> scored both as false positives, and for scoring that is right — vuln-web has no
+> auth, session or cookies, so there is no classic CSRF (the browser has no
+> credential to send automatically) and there are no session tokens. But two
+> honest caveats: (a) the POST endpoints *do* accept `application/x-www-form-urlencoded`
+> bodies (`_form()` falls back to `parse_qs`), so a cross-origin HTML form could
+> submit to `/ping` — the model's *mechanism* is not pure fiction, only its
+> "authenticated user" premise is; (b) the "session tokens" wording is likely
+> primed by the canary column being named `...-admin-session`. So the hallucination
+> is best described as a right-sounding checklist item applied without checking
+> whether the app has the thing it assumes, not as an invented capability.
+
+> **Comment ablation (`duel/llm_ablation.py`).** honesty.md §1 notes the source
+> names every bug in a `# VULN` comment, which helps an LLM reader. This runs the
+> same prompt on the source with and without those comments (same model) and
+> scores both, so the hint effect is measured. Results in
+> `results/llm_ablation_scores.csv`; the model used here is the locally installed
+> one, not the main duel's qwen, so it is an original-vs-stripped comparison, not
+> a reproduction of the qwen runs.
+>
+> **Measured result (3 runs each, local model):** mean recall **100 % with the
+> comments and 100 % without** — removing the `# VULN` hints did *not* cost recall
+> on these three textbook sinks; the model finds them from the code itself. Mean
+> precision went 100 % → 83 %, because the stripped runs also surfaced the real
+> (out-of-scope) information-disclosure bug. So for this model the hints were not
+> load-bearing for *finding* the three sinks. That is a narrower, honest claim
+> than "the comments give the LLM the answers"; a larger model or a subtler bug
+> could still depend on them, which is why the ablation is the evidence, not the
+> guess.
 
 **Target:** `labs/vuln-web/app/vulnweb_app.py`. The same file was attacked in
 Part A, so every finding can be checked by reading it.

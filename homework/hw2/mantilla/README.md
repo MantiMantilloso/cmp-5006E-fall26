@@ -13,11 +13,11 @@ and run a scanner-vs-LLM duel scored against a ground truth we wrote by hand.
 
 | Part | Result | Evidence |
 |---|---|---|
-| **A** Attack | 3 classes confirmed at Medium **only through a bypass**. 5 naive payloads blocked (0/3), 10 bypasses confirmed (3/3), negative controls clean | [`attack/`](attack/README.md), `results/attack_results.csv` |
-| **B1** WAF | On the **Low baseline**: V1 coverage **5/5**, **4/4 bypasses** land, FP **0/26** on the supplied corpus. V2 (hardened): 0/4 bypasses, FP **8/26 = 31 %** (blocks `o'brien`). These counts do not describe a WAF stacked with Medium | [`defend/`](defend/README.md), `results/defense_attacks.csv`, `results/waf_false_positives.csv` |
+| **A** Attack | 3 classes confirmed at the custom Medium **only through a bypass**. An additional real-DVWA Medium SQLi cross-check confirms numeric and UNION bypasses | [`attack/`](attack/README.md), `results/attack_results.csv`, `results/dvwa_medium_sqli.csv` |
+| **B1** WAF | On the **Low baseline**: V1 coverage **5/5**, **4/4 bypasses** land, FP **0/26** on the supplied corpus. Additional password testing finds V1 blocks 1/15 human passwords and V2 blocks 8/15 | [`defend/`](defend/README.md), `results/defense_attacks.csv`, `results/waf_false_positives.csv` |
 | **B2** Fix | Parameterized `do_login`: **0/9** attacks land, real logins still work. Guarantee stated as a conditional | [`defend/`](defend/README.md) |
-| **C** Duel | LLM (qwen3.8:27b): recall **3/3** in all 5 runs, precision **43 % at T=0 vs 75 % at T=0.7**. Best hallucination: CSRF in an app with no sessions. sqlmap 100 % precision / 33 % recall. bandit 33 % / 33 %. **semgrep 0/3** (worst miss: a textbook f-string SQLi). No tool claimed access control, which is correct because none exists |  [`duel/`](duel/README.md), `results/duel_*.csv`, `results/llm_nondeterminism.csv` |
-| **D** Honesty | 5 self-critiques | [`honesty.md`](honesty.md) |
+| **C** Duel | Main LLM/scanner results are unchanged. A same-model comment ablation measures performance with and without `# VULN` hints |  [`duel/`](duel/README.md), `results/duel_*.csv`, `results/llm_ablation_scores.csv` |
+| **D** Honesty | 6 self-critiques, including the new cross-checks | [`honesty.md`](honesty.md) |
 
 ## Layout
 
@@ -25,21 +25,24 @@ and run a scanner-vs-LLM duel scored against a ground truth we wrote by hand.
 common.py              shared: start vuln-web on 127.0.0.1, senders, the 3 oracles, CSV writer
 attack/medium_app.py   the Medium level: DVWA-style filters in front of the real sinks
 attack/attack.py       Part A
+attack/dvwa_medium.py  optional real-DVWA Medium SQLi cross-check
 defend/waf.py          B1: WAF_V1 (deployed) and WAF_V2 (broad) blocklists
 defend/fixed_app.py    B2: parameterized do_login
 defend/defend.py       Part B: coverage, bypasses, FP rate, re-run against the fix
 defend/benign_traffic.json  benign corpus (copy of the course's duel-2-web file)
+defend/benign_passwords.json password-field false-positive corpus
+defend/measure_pw_fp.py  password-field WAF false-positive measurement
+defend/bypass_v2.py    fresh WAF_V2 bypass attempt
 duel/ground_truth.json hand-built ground truth (frozen before any tool ran)
 duel/run_scanners.py   semgrep + bandit (static), sqlmap (dynamic) -> duel/raw/
 duel/llm_review.py     local LLM via seclab.LLM, 5 runs -> duel/raw/llm_*.json
 duel/score.py          seclab.scan scoring of everything in duel/raw/
+duel/llm_ablation.py   LLM comparison with and without # VULN comments
+duel/ablation_score.py score the ablation outputs
+duel/raw_ablation/     saved ablation responses
 results/*.csv          every number quoted in the READMEs
 honesty.md, AI_LOG.md   limitations and local AI assistance log
 AI_LOG_GROUP.md        original group AI log, preserved from the source commit
-REVIEW.md              local verification, corrections, and remaining limitations
-verify_readiness.py    portable reproduction, full replay, and supplementary coverage
-coverage_payloads.json 20 supplementary SQLi inputs, with provenance
-READINESS.md           completed local checks and final submission checklist
 ```
 
 ## Reproduce (from `homework/hw2/mantilla/`, Python 3.10+)
@@ -47,8 +50,10 @@ READINESS.md           completed local checks and final submission checklist
 ```bash
 python3 attack/attack.py          # Part A, stdlib only, ~1 s, asserts its claims
 python3 defend/defend.py          # Part B, stdlib only, ~1 s, asserts its claims
+python3 defend/measure_pw_fp.py   # password-field false positives
+python3 defend/bypass_v2.py       # fresh V2 bypass attempt
 python3 duel/score.py             # Part C scoring from the committed raw outputs
-python3 verify_readiness.py       # renamed-copy reproduction + complete HTTP replay
+python3 duel/ablation_score.py    # score saved LLM comment-ablation outputs
 ```
 
 To re-run the tools themselves (optional, slow):
@@ -67,9 +72,8 @@ scoring commands were also reproduced locally on Linux, Python 3.12.3.
 
 This group implementation was imported from
 [`jjjulianleon/cmp-5006E-fall26`, branch `hw2`](https://github.com/jjjulianleon/cmp-5006E-fall26/tree/1805e412dbacf2685e264fc4ac51d8984f3ae03d/homework/hw2/leon),
-commit `1805e412dbacf2685e264fc4ac51d8984f3ae03d`. See [REVIEW.md](REVIEW.md) for
-what was independently reproduced, the corrected adjusted score, and remaining
-rubric ambiguities. The original scanner/LLM raw outputs are unchanged. Historical
+commit `1805e412dbacf2685e264fc4ac51d8984f3ae03d`. The original scanner/LLM raw
+outputs are unchanged. Historical
 paths and first-person review statements in [AI_LOG_GROUP.md](AI_LOG_GROUP.md)
 belong to the source group's log; they do not establish Mauricio's personal review.
 
@@ -103,12 +107,3 @@ folder/branch references and personal AI-log entries for each member; keep the
 shared experiment code, inputs, raw outputs, and results consistent.
 
 No remote push or PR was made during this local import.
-
-## Follow-up readiness check
-
-The full replay and folder-portability checks now pass. See
-[READINESS.md](READINESS.md) for the 30-input SQLi evaluation, 14 controls,
-supplementary 20-input coverage corpus, before-submission checklist, and the
-remaining custom Medium interpretation question. These additional measurements
-are separate from the six original result CSVs; the original group outputs remain
-preserved.
