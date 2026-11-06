@@ -1,108 +1,114 @@
-# HW2 — Web Attack & Defend
+# Homework 2: Web Attack & Defend (vuln-web)
 
-**Group member:** Mauricio Mantilla.
+**Group:** Julian Leon, Mauricio Mantilla, James Soto
+**Course:** CMP 5006E Computer Security, USFQ, fall 2026
+**Target:** the course's `labs/vuln-web` app, run in-process on `127.0.0.1` only
+(local sandbox, see [`resources/ethics-and-scope.md`](../../../resources/ethics-and-scope.md)).
 
-**Status:** workspace prepared; attacks, defenses, and comparison results are
-pending. This folder is the main working directory for HW2 and the complete
-submission belongs under `homework/hw2/mantilla/`.
+We attack vuln-web at a custom DVWA-style **Medium** level (SQLi, XSS, cmdi), defend the
+SQLi two ways (a blocklist WAF that we then bypass, and a parameterized query),
+and run a scanner-vs-LLM duel scored against a ground truth we wrote by hand.
 
-The homework confirms SQL injection, reflected XSS, and command injection;
-evaluates a WAF and a structural fix; and compares a real classical scanner with
-an LLM reviewer. Follow the [assignment](../hw2-web.md) for the grading requirements.
+## Headline results
 
-## Work from this directory
+| Part | Result | Evidence |
+|---|---|---|
+| **A** Attack | 3 classes confirmed at Medium **only through a bypass**. 5 naive payloads blocked (0/3), 10 bypasses confirmed (3/3), negative controls clean | [`attack/`](attack/README.md), `results/attack_results.csv` |
+| **B1** WAF | On the **Low baseline**: V1 coverage **5/5**, **4/4 bypasses** land, FP **0/26** on the supplied corpus. V2 (hardened): 0/4 bypasses, FP **8/26 = 31 %** (blocks `o'brien`). These counts do not describe a WAF stacked with Medium | [`defend/`](defend/README.md), `results/defense_attacks.csv`, `results/waf_false_positives.csv` |
+| **B2** Fix | Parameterized `do_login`: **0/9** attacks land, real logins still work. Guarantee stated as a conditional | [`defend/`](defend/README.md) |
+| **C** Duel | LLM (qwen3.8:27b): recall **3/3** in all 5 runs, precision **43 % at T=0 vs 75 % at T=0.7**. Best hallucination: CSRF in an app with no sessions. sqlmap 100 % precision / 33 % recall. bandit 33 % / 33 %. **semgrep 0/3** (worst miss: a textbook f-string SQLi). No tool claimed access control, which is correct because none exists |  [`duel/`](duel/README.md), `results/duel_*.csv`, `results/llm_nondeterminism.csv` |
+| **D** Honesty | 5 self-critiques | [`honesty.md`](honesty.md) |
 
-From the repository root:
+## Layout
 
-```bash
-cd homework/hw2/mantilla
-export PYTHONPATH="$(git rev-parse --show-toplevel)${PYTHONPATH:+:$PYTHONPATH}"
-python3 -m seclab.targets --list
+```
+common.py              shared: start vuln-web on 127.0.0.1, senders, the 3 oracles, CSV writer
+attack/medium_app.py   the Medium level: DVWA-style filters in front of the real sinks
+attack/attack.py       Part A
+defend/waf.py          B1: WAF_V1 (deployed) and WAF_V2 (broad) blocklists
+defend/fixed_app.py    B2: parameterized do_login
+defend/defend.py       Part B: coverage, bypasses, FP rate, re-run against the fix
+defend/benign_traffic.json  benign corpus (copy of the course's duel-2-web file)
+duel/ground_truth.json hand-built ground truth (frozen before any tool ran)
+duel/run_scanners.py   semgrep + bandit (static), sqlmap (dynamic) -> duel/raw/
+duel/llm_review.py     local LLM via seclab.LLM, 5 runs -> duel/raw/llm_*.json
+duel/score.py          seclab.scan scoring of everything in duel/raw/
+results/*.csv          every number quoted in the READMEs
+honesty.md, AI_LOG.md   limitations and local AI assistance log
+AI_LOG_GROUP.md        original group AI log, preserved from the source commit
+REVIEW.md              local verification, corrections, and remaining limitations
+verify_readiness.py    portable reproduction, full replay, and supplementary coverage
+coverage_payloads.json 20 supplementary SQLi inputs, with provenance
+READINESS.md           completed local checks and final submission checklist
 ```
 
-Use the repository's existing virtual environment when needed:
-`source ../../../.venv/bin/activate`. The shared `seclab` modules and lab source
-stay at the repository root; keep HW2 implementations and generated evidence in
-this folder. Run Python commands after setting `PYTHONPATH` as shown above.
-
-## Submission layout
-
-| Path | Content |
-| --- | --- |
-| [attack/](attack/README.md) | Part A: three Medium-level bypasses and oracle evidence |
-| [defend/](defend/README.md) | Part B: WAF, three same-intent bypasses, false positives, structural fix |
-| [defend/benign_traffic.json](defend/benign_traffic.json) | Unmodified instructor corpus for false-positive measurements |
-| [duel/](duel/README.md) | Part C: independent ground truth, scanner, two LLM reviews, scoring |
-| [honesty.md](honesty.md) | Part D: limitations and potential unfairness |
-| [AI_LOG.md](AI_LOG.md) | AI assistance and personal review record |
-
-Commit the ground truth, benign corpus, raw evidence, and result CSVs here when
-the experiments are complete. No experiment results have been generated by this
-setup.
-
-## Target preparation
-
-The target source is [vulnweb_app.py](../../../labs/vuln-web/app/vulnweb_app.py).
-For the Docker route, run these commands from this directory:
+## Reproduce (from `homework/hw2/mantilla/`, Python 3.10+)
 
 ```bash
-docker build -t seclab/vuln-web:local ../../../labs/vuln-web
-python3 -m seclab.targets --up vuln-web
-# After the experiments:
-python3 -m seclab.targets --down
+python3 attack/attack.py          # Part A, stdlib only, ~1 s, asserts its claims
+python3 defend/defend.py          # Part B, stdlib only, ~1 s, asserts its claims
+python3 duel/score.py             # Part C scoring from the committed raw outputs
+python3 verify_readiness.py       # renamed-copy reproduction + complete HTTP replay
 ```
 
-Use the loopback URL reported by the launcher. See the
-[lab guide](../../../labs/vuln-web/README.md) and
-[ethics policy](../../../resources/ethics-and-scope.md).
-
-**Requirement to resolve before Part A:** the supplied `vuln-web` source has no
-Medium filter mode. Use the assignment's DVWA-at-Medium option, or establish an
-accepted Medium-level configuration for `vuln-web` and record its implementation
-and settings here. Do not label unfiltered baseline results as Medium-level
-bypasses. Record any target changes in this submission folder and ensure the
-attack and both duel tools use the same target version.
-
-## PR workflow
-
-- Working branch: `hw2-mantilla`, created from course `upstream/main` at
-  `6ea4954` during setup on 2026-11-05.
-- Push destination: `origin` (`MantiMantilloso/cmp-5006E-fall26`).
-- Submission PR: `MantiMantilloso:hw2-mantilla` into
-  `aproano2/cmp-5006E-fall26:main` (the course remote, `upstream`).
-- Earlier studio commits remain on the local `main` branch. Existing unrelated
-  uncommitted files are still present in the working tree; stage only this folder.
-
-When the homework and personal review are complete, run from this directory:
+To re-run the tools themselves (optional, slow):
 
 ```bash
-git add -- .
-git diff --cached --stat
-git diff --cached --name-only
-git diff --cached --check
-git commit -m "Complete HW2 submission for Mantilla"
-git diff --name-only upstream/main...HEAD
-git push -u origin hw2-mantilla
+pip install semgrep bandit sqlmap && python3 duel/run_scanners.py
+ollama pull qwen3.8:27b && python3 duel/llm_review.py   # delete duel/raw/llm_*.json first
 ```
 
-Before committing, verify every staged path starts with
-`homework/hw2/mantilla/`. Before opening the PR, verify the same for the committed
-branch diff, then open a PR against course `main`. The PR should describe the
-measured results, reproduction commands, and limitations, and support the assigned
-classmate's evidence review.
+No Docker needed: the scripts import `labs/vuln-web/app/vulnweb_app.py` and serve
+it on a free localhost port, the same way the week-6/7 studios do. Tested on
+macOS (M1 Pro), Python 3.14.7 by the group; the attack, defense, and committed-output
+scoring commands were also reproduced locally on Linux, Python 3.12.3.
 
-## Completion checklist
+## Local copy and submission workflow
 
-- [ ] README lists every group member and exact reproduction commands.
-- [ ] Three vulnerability classes confirmed at Medium, including bypasses,
-      oracles, OWASP 2021 mapping, and an access-control discussion.
-- [ ] WAF coverage, at least three same-intent bypasses, and measured false-positive
-      cost on the provided corpus, including a legitimate blocked example.
-- [ ] Structural fix evaluated against all Part-A payloads and B1 bypasses, with
-      a conditional guarantee and legitimate controls.
-- [ ] Hand-built ground truth reviewed before the scored scanner/LLM runs.
-- [ ] Real scanner output and at least two LLM reviews preserved; precision,
-      recall, F1, hallucinations, misses, variability, and access control discussed.
-- [ ] Ground truth, benign corpus, and actual result CSVs committed.
-- [ ] Honesty section and AI log reviewed and completed personally.
-- [ ] PR diff contains only this submission directory.
+This group implementation was imported from
+[`jjjulianleon/cmp-5006E-fall26`, branch `hw2`](https://github.com/jjjulianleon/cmp-5006E-fall26/tree/1805e412dbacf2685e264fc4ac51d8984f3ae03d/homework/hw2/leon),
+commit `1805e412dbacf2685e264fc4ac51d8984f3ae03d`. See [REVIEW.md](REVIEW.md) for
+what was independently reproduced, the corrected adjusted score, and remaining
+rubric ambiguities. The original scanner/LLM raw outputs are unchanged. Historical
+paths and first-person review statements in [AI_LOG_GROUP.md](AI_LOG_GROUP.md)
+belong to the source group's log; they do not establish Mauricio's personal review.
+
+`homework/hw2/mantilla/` is the main working directory. The active branch is
+`hw2-mantilla`, based on course `upstream/main`; keep the PR diff confined to this
+folder. Unrelated studio work is still present in the working tree.
+
+The results are reproducible for the configurations described here. The custom
+Medium layer is the group's interpretation of the assignment; the repository
+contains no evidence that the instructor has accepted it as equivalent to DVWA
+Medium. Keep that distinction visible when preparing the final submission.
+
+When the group is ready to submit, stage only this directory and inspect the
+full staged diff. Push `hw2-mantilla` to `origin`
+(`MantiMantilloso/cmp-5006E-fall26`) and open the group PR into course
+`aproano2/cmp-5006E-fall26:main`.
+
+Each group member must upload the same reviewed group work under their own
+`homework/hw2/<lastname>/` directory and submit their own PR. Synchronize the
+corrected scorer, ground truth, reports, and generated CSVs before making those
+copies. Merge each member's own contributions into that shared version first,
+preserving their work and resolving any conflicting changes. Re-run affected
+experiments and regenerate the corresponding CSVs and report numbers when a
+contribution changes behavior. Every member's copy should include the combined
+group contributions and the corrections from this review.
+
+Preserve the shared raw tool outputs and list all three group members.
+The scripts resolve paths relative to their files, so changing the submission
+folder name at the same depth requires no runtime code changes. Adjust displayed
+folder/branch references and personal AI-log entries for each member; keep the
+shared experiment code, inputs, raw outputs, and results consistent.
+
+No remote push or PR was made during this local import.
+
+## Follow-up readiness check
+
+The full replay and folder-portability checks now pass. See
+[READINESS.md](READINESS.md) for the 30-input SQLi evaluation, 14 controls,
+supplementary 20-input coverage corpus, before-submission checklist, and the
+remaining custom Medium interpretation question. These additional measurements
+are separate from the six original result CSVs; the original group outputs remain
+preserved.
